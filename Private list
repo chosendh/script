@@ -1,1 +1,50 @@
+Custom hotkeys for every Feature
 
+Aimbot (Camlock) Features
+
+- Smoothness
+- S​e​n​s​i​t​i​v​i​t​y
+- Prediction editor --// X,Y,Z 
+- Easing style
+- Easing direction
+- Customizable hit-parts --// Closest Point, Closest Part, HitPart Name.
+- Closest-Point Modes --// Advanced & Regular
+- Customizable FOV 
+
+Silent Aim Features
+
+- Target mode --// Target, Automatic
+- FOV MODE 
+- Distance check
+- Client redirection 
+- Customizable hit-parts such as --// Closest Point, Closest Part, HitPart Name.
+- Closest-Point Modes --// Advanced & Regular
+- Prediction editor --// X,Y,Z 
+- Clamp Y Axis 
+- 2D/3D FOV Modes
+- Customizable FOV
+
+
+Triggerbot Features
+
+- Max Distance
+- Cooldown --// triggerbot delay fast / slow
+- Prediction 
+- Activation Modes --// keybind/mouse button to activate the triggerbot & Toggle/Hold mode
+- Customizable FOV --// X,Y,Z
+
+Player modifications
+
+- No tripping
+- Walk speed
+- Inventory Sorter
+
+Conditions
+
+Visible Check
+Knocked Check
+Grabbed Check
+Protected --// basically the spawn protection
+Chat Focused
+Self Knocked
+and more...
