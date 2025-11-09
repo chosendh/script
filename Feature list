@@ -1,0 +1,41 @@
+NOTE: This Features wrote here arent all we have in the script.
+
+Aimbot (Camlock) Features
+
+- Smoothness
+- S​e​n​s​i​t​i​v​i​t​y
+- Prediction editor --// X,Y,Z 
+- Easing style
+- Easing direction
+- Customizable hit-parts --// Closest Point, Closest Part, HitPart Name, 
+- Closest-Point Modes --// Advanced & Regular
+- Customizable FOV 
+
+Silent Aim Features
+
+- Target mode --// Target, Automatic
+- Customizable hit-parts --// Closest Point, Closest Part, HitPart Name,
+- Closest-Point Modes --// Advanced & Regular
+- Prediction editor --// X,Y,Z 
+- Clamp Y Axis
+- Customizable FOV --//  2D/3D, size
+
+Triggerbot Features
+
+- Max Distance
+- Cooldown --// triggerbot delay fast / slow
+- Prediction 
+- Activation Modes --// keybind/mouse button to activate the triggerbot & Toggle/Hold mode
+- Customizable FOV --// X,Y,Z
+
+Weapon modifications
+
+- Double tap
+- Bullet spread modifier --// scale 0, 0.1 - 1. randomizer
+- Client redirection
+
+Player modifications
+
+- No tripping
+- Walk speed
+
