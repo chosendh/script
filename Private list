@@ -33,6 +33,12 @@ Triggerbot Features
 - Activation Modes --// keybind/mouse button to activate the triggerbot & Toggle/Hold mode
 - Customizable FOV --// X,Y,Z
 
+Weapon modifications
+
+Bullet Spread modifier --// default set as 0.9, minimum 0 max 1 // All shotguns
+Client Redirection
+Double tap --// you can use it on any weapon.
+
 Player modifications
 
 - No tripping
