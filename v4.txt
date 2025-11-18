@@ -1,0 +1,575 @@
+-- Performance settings (not in shared table)
+local Performance = {
+    UpdateRate = 60,
+    MaxDistance = 1000,
+    CacheLifetime = 0.1,
+    UseCaching = true
+}
+
+-- Roblox User ID Whitelist System
+local WhitelistedUsers = {
+    5031745450,
+    7351981030
+}
+
+-- Caching system for performance
+local Cache = {
+    Players = {},
+    LastUpdate = 0,
+    ValidPlayers = {}
+}
+
+-- Optimized security check (runs once)
+local function SecurityCheck()
+    if shared.RageC.Auth_Key == nil or shared.RageC.Auth_Key == '' then
+        return false
+    end
+    
+    local localPlayer = game.Players.LocalPlayer
+    if not localPlayer then return false end
+    
+    for _, whitelistedId in ipairs(WhitelistedUsers) do
+        if localPlayer.UserId == whitelistedId then
+            return true
+        end
+    end
+    return false
+end
+
+if not SecurityCheck() then
+    warn("Security check failed. Script will not load.")
+    return
+end
+
+-- Optimized anti-detection
+local gamerawmetatable = getrawmetatable(game)
+setreadonly(gamerawmetatable, false)
+
+local oldnamecall1 = gamerawmetatable.__namecall
+gamerawmetatable.__namecall = newcclosure(function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod() or ""
+    
+    local blockedStrings = {
+        "TeleportDetect", "CHECKER_1", "CHECKER", "GUI_CHECK", 
+        "OneMoreTime", "checkingSPEED", "BANREMOTE", "PERMAIDBAN", 
+        "KICKREMOTE", "BR_KICKPC", "BR_KICKMOBILE"
+    }
+    
+    for _, blocked in ipairs(blockedStrings) do
+        if tostring(args[1]):find(blocked) or tostring(method):find(blocked) then
+            return nil
+        end
+    end
+    
+    return oldnamecall1(self, ...)
+end)
+
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Performance variables
+local lastFrameTime = tick()
+local frameCount = 0
+local currentFPS = 60
+
+-- Optimized FPS counter (runs less frequently)
+local fpsConnection = RunService.Heartbeat:Connect(function()
+    frameCount = frameCount + 1
+    if tick() - lastFrameTime >= 1 then
+        currentFPS = frameCount
+        frameCount = 0
+        lastFrameTime = tick()
+    end
+end)
+
+--// CamLock
+local CamlockState = false
+local AutoAirState = false
+local enemy = nil
+
+-- SilentAim target variables
+local SilentAimTarget = nil
+local SilentAimTargeting = false
+
+-- Optimized player caching system
+local function UpdatePlayerCache()
+    if tick() - Cache.LastUpdate < Performance.CacheLifetime then
+        return Cache.ValidPlayers
+    end
+    
+    Cache.ValidPlayers = {}
+    
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer then
+            local Character = Player.Character
+            if Character then
+                local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                local AimPart = Character:FindFirstChild(shared.RageC.AimAssist.AimPart)
+                
+                if Humanoid and Humanoid.Health > 0 and AimPart then
+                    -- Distance check for performance
+                    local distance = (AimPart.Position - Camera.CFrame.Position).Magnitude
+                    if distance <= Performance.MaxDistance then
+                        table.insert(Cache.ValidPlayers, {
+                            Player = Player,
+                            Character = Character,
+                            Humanoid = Humanoid,
+                            AimPart = AimPart,
+                            Distance = distance
+                        })
+                    end
+                end
+            end
+        end
+    end
+    
+    Cache.LastUpdate = tick()
+    return Cache.ValidPlayers
+end
+
+-- Optimized FindNearestEnemy with caching
+local function FindNearestEnemy()
+    local validPlayers = UpdatePlayerCache()
+    local ClosestDistance, ClosestPlayer = math.huge, nil
+    local CenterPosition = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, data in ipairs(validPlayers) do
+        local Position, IsVisible = Camera:WorldToViewportPoint(data.AimPart.Position)
+        if IsVisible then
+            local Distance = (CenterPosition - Vector2.new(Position.X, Position.Y)).Magnitude
+            if Distance < ClosestDistance and Distance <= shared.RageC.SilentAim.FOV.Radius then
+                ClosestPlayer = data.AimPart
+                ClosestDistance = Distance
+            end
+        end
+    end
+    
+    return ClosestPlayer
+end
+
+-- Find closest player within FOV for SilentAim
+local function FindClosestPlayerInFOV()
+    local validPlayers = UpdatePlayerCache()
+    local ClosestDistance, ClosestPart = math.huge, nil
+    local MousePos = UserInputService:GetMouseLocation()
+    local FOVRadius = shared.RageC.SilentAim.FOV.Radius
+
+    for _, data in ipairs(validPlayers) do
+        if not shared.RageC.SilentAim.HealthCheck or data.Humanoid.Health > 0 then
+            local part
+            if shared.RageC.SilentAim.HitPartMode == "ClosestPart" then
+                part = GetClosestPart(data.Character, MousePos)
+            else
+                part = data.Character:FindFirstChild(shared.RageC.SilentAim.HitPart) or data.Character:FindFirstChild("Head")
+            end
+            
+            if part then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local distance = (Vector2.new(screenPos.X, screenPos.Y) - MousePos).Magnitude
+                    if distance < FOVRadius and distance < ClosestDistance then
+                        ClosestDistance = distance
+                        ClosestPart = part
+                    end
+                end
+            end
+        end
+    end
+    
+    return ClosestPart
+end
+
+-- Optimized CamLock with frame skipping for performance
+local lastCamlockUpdate = 0
+local camlockConnection = RunService.Heartbeat:Connect(function(delta)
+    local now = tick()
+    
+    -- Skip frames based on performance settings (reduces CPU usage)
+    if now - lastCamlockUpdate < (1 / Performance.UpdateRate) then
+        return
+    end
+    
+    if CamlockState and enemy then
+        local targetPos = enemy.Position + Vector3.new(shared.RageC.AimAssist.Prediction, 0, 0)
+        targetPos = targetPos + Vector3.new(shared.RageC.AimAssist.HorizontalPrediction, shared.RageC.AimAssist.VerticalPrediction, 0)
+
+        if enemy.Velocity.Y > 1 then
+            targetPos = targetPos + Vector3.new(0, shared.RageC.Offsets.Jump, 0)
+        elseif enemy.Velocity.Y < -1 then
+            targetPos = targetPos + Vector3.new(0, shared.RageC.Offsets.Fall, 0)
+        end
+
+        local currentCFrame = Camera.CFrame
+        local targetCFrame = CFrame.new(currentCFrame.Position, targetPos)
+        
+        -- Adaptive smoothness based on FPS
+        local adaptiveSmoothness = shared.RageC.Smoothness * math.min(currentFPS / 60, 1)
+        Camera.CFrame = currentCFrame:Lerp(targetCFrame, math.clamp(adaptiveSmoothness * delta * 60, 0, 1))
+    end
+    
+    lastCamlockUpdate = now
+end)
+
+-- Optimized AutoAir with less frequent checks
+local lastAirCheck = 0
+local autoAirConnection = RunService.Heartbeat:Connect(function()
+    local now = tick()
+    if now - lastAirCheck < 0.1 then return end -- Check only 10 times per second
+    
+    if AutoAirState and enemy and enemy.Velocity.Y > 30 then
+        task.wait(shared.RageC.Misc.AirDelay)
+        local Character = LocalPlayer.Character
+        if Character then
+            local Tool = Character:FindFirstChildOfClass("Tool")
+            if Tool then Tool:Activate() end
+        end
+    end
+    
+    lastAirCheck = now
+end)
+
+-- Input handling
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- AimAssist toggle
+    if input.KeyCode == Enum.KeyCode[shared.RageC.AimAssist.ToggleKey:upper()] then
+        CamlockState = not CamlockState
+        if CamlockState then
+            enemy = FindNearestEnemy()
+        else
+            enemy = nil
+        end
+    end
+    
+    -- SilentAim target mode toggle
+    if input.KeyCode == Enum.KeyCode[shared.RageC.SilentAim.TargetKey:upper()] then
+        if shared.RageC.SilentAim.Mode == "Target" then
+            SilentAimTargeting = not SilentAimTargeting
+            if SilentAimTargeting then
+                SilentAimTarget = FindClosestPlayerInFOV()
+                if not SilentAimTarget then
+                    SilentAimTargeting = false
+                end
+            else
+                SilentAimTarget = nil
+            end
+        end
+    end
+end)
+
+--// SilentAim (Optimized)
+local FOVCircle
+if shared.RageC.SilentAim.FOV.Visible then
+    local successFOV, fovDrawing = pcall(function()
+        return Drawing.new("Circle")
+    end)
+    if successFOV then 
+        FOVCircle = fovDrawing 
+        FOVCircle.Visible = false -- Start with FOV hidden for performance
+    end
+end
+
+local originalIndex
+local silentAimConnection
+
+-- Cached functions to avoid recreation
+local IsHoldingKnife = function()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local tool = char:FindFirstChildOfClass("Tool")
+    return tool and tool.Name:lower():find("knife") ~= nil
+end
+
+local bodyParts = {
+    "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso"
+} -- Reduced part list for performance
+
+local function GetClosestPart(Character, mousePos)
+    local closest, smallest = nil, math.huge
+    for _, name in ipairs(bodyParts) do
+        local part = Character:FindFirstChild(name)
+        if part then
+            local screen, vis = Camera:WorldToViewportPoint(part.Position)
+            if vis then
+                local mag = (Vector2.new(screen.X, screen.Y) - mousePos).Magnitude
+                if mag < smallest then
+                    smallest = mag
+                    closest = part
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function ApplyPrediction(Target)
+    if not shared.RageC.SilentAim.Prediction.Enabled then return Target.Position end
+    local vel = Target.Velocity or Vector3.new()
+    return Target.Position + Vector3.new(vel.X * shared.RageC.SilentAim.Prediction.X, vel.Y * shared.RageC.SilentAim.Prediction.Y, vel.Z * shared.RageC.SilentAim.Prediction.Z)
+end
+
+local function ApplyBulletRedirection(targetPart)
+    if not shared.RageC.BulletRedirection.Enabled then return targetPart.Position end
+    local direction = targetPart.CFrame.LookVector
+    return targetPart.Position + direction * shared.RageC.BulletRedirection.RedirectDistance
+end
+
+local function CheckHitChance()
+    return math.random(1,100) <= shared.RageC.SilentAim.HitChance.X
+end
+
+-- Optimized SilentAim target finding with modes
+local lastTargetFind = 0
+local cachedTarget = nil
+
+local function GetSilentAimTarget()
+    local now = tick()
+    
+    -- Cache target for better performance
+    if now - lastTargetFind < 0.05 and cachedTarget then -- Cache for 0.05 seconds
+        return cachedTarget
+    end
+    
+    if not shared.RageC.SilentAim.Enabled or (shared.RageC.SilentAim.KnifeCheck and IsHoldingKnife()) then 
+        cachedTarget = nil
+        return nil 
+    end
+
+    local target = nil
+    
+    -- Mode-based targeting
+    if shared.RageC.SilentAim.Mode == "Target" then
+        -- Target mode: use manually selected target
+        if SilentAimTargeting and SilentAimTarget then
+            target = SilentAimTarget
+        end
+    else
+        -- Automatic mode: find closest player in FOV
+        target = FindClosestPlayerInFOV()
+    end
+    
+    cachedTarget = target
+    lastTargetFind = now
+    return target
+end
+
+-- Optimized SilentAim setup with performance in mind
+local function setupSilentAim()
+    local success, mt = pcall(getrawmetatable, game)
+    if not success then return end
+    
+    originalIndex = mt.__index
+    setreadonly(mt, false)
+    
+    mt.__index = newcclosure(function(self, key)
+        if not checkcaller() and self == Mouse and shared.RageC.SilentAim.Enabled and not (shared.RageC.SilentAim.KnifeCheck and IsHoldingKnife()) then
+            if key == "Hit" or key == "Target" then
+                if CheckHitChance() then
+                    local part = GetSilentAimTarget()
+                    if part then 
+                        local predictedPos = ApplyPrediction(part)
+                        local redirectedPos = ApplyBulletRedirection(part)
+                        local finalPos = predictedPos:Lerp(redirectedPos, 0.5)
+                        return CFrame.new(finalPos)
+                    end
+                end
+            end
+        end
+        return originalIndex(self, key)
+    end)
+    
+    setreadonly(mt, true)
+
+    -- Optimized FOV rendering (runs less frequently)
+    if FOVCircle then
+        silentAimConnection = RunService.RenderStepped:Connect(function()
+            if currentFPS < 30 then -- Reduce FOV updates when FPS is low
+                FOVCircle.Visible = false
+                return
+            end
+            
+            local f = shared.RageC.SilentAim.FOV
+            FOVCircle.Visible = f.Visible
+            FOVCircle.Position = UserInputService:GetMouseLocation()
+            FOVCircle.Radius = f.Radius
+            FOVCircle.Color = f.OutlineColor
+            FOVCircle.Thickness = f.Thickness
+            FOVCircle.Transparency = f.Transparency
+        end)
+    end
+end
+
+--// TriggerBot (Optimized)
+local isShooting = false
+local lastTriggerUpdate = 0
+
+local function ClosestPart(model)
+    local best, dist = nil, math.huge
+    local mousePos = UserInputService:GetMouseLocation()
+    for _, name in ipairs(bodyParts) do -- Use reduced body parts list
+        local p = model:FindFirstChild(name)
+        if p then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(p.Position)
+            if onScreen then
+                local mag = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if mag < dist then 
+                    dist = mag 
+                    best = p 
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function GetHitPart(model)
+    if shared.RageC.TriggerBot.HitPartMode == "ClosestPart" then
+        return ClosestPart(model)
+    end
+    return model:FindFirstChild(shared.RageC.TriggerBot.HitPart) or model:FindFirstChild("Head")
+end
+
+local function Predict(part)
+    if not shared.RageC.TriggerBot.Prediction.Enabled then return part.Position end
+    local v = part.Velocity or Vector3.new()
+    return part.Position + Vector3.new(v.X * shared.RageC.TriggerBot.Prediction.X, v.Y * shared.RageC.TriggerBot.Prediction.Y, v.Z * shared.RageC.TriggerBot.Prediction.Z)
+end
+
+local function GetTriggerTarget()
+    local t = Mouse.Target
+    if not t then return nil end
+    local model = t:FindFirstAncestorOfClass("Model")
+    if not model or model == LocalPlayer.Character then return nil end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum then return nil end
+    if shared.RageC.TriggerBot.HealthCheck and hum.Health <= 0 then return nil end
+    if shared.RageC.TriggerBot.KnifeCheck and IsHoldingKnife() then return nil end
+    return model
+end
+
+local function MoveMouse(pos)
+    local s, onScreen = Camera:WorldToScreenPoint(pos)
+    if onScreen then
+        VirtualInputManager:SendMouseMoveEvent(s.X, s.Y, game)
+    end
+end
+
+local function ShootDown()
+    if not isShooting then
+        VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, true, game, 0)
+        isShooting = true
+    end
+end
+
+local function ShootUp()
+    if isShooting then
+        VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, false, game, 0)
+        isShooting = false
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, g)
+    if not g and input.KeyCode == Enum.KeyCode[shared.RageC.TriggerBot.ToggleKey:upper()] then
+        shared.RageC.TriggerBot.Enabled = not shared.RageC.TriggerBot.Enabled
+        if not shared.RageC.TriggerBot.Enabled then ShootUp() end
+    end
+end)
+
+-- Optimized TriggerBot with frame skipping
+local lastShot = 0
+local triggerConnection = RunService.RenderStepped:Connect(function()
+    local now = tick()
+    
+    -- Skip frames based on performance
+    if now - lastTriggerUpdate < (1 / Performance.UpdateRate) then
+        return
+    end
+    
+    if not shared.RageC.TriggerBot.Enabled then 
+        ShootUp() 
+        return 
+    end
+    
+    if now - lastShot < shared.RageC.TriggerBot.Delay then return end
+    
+    local model = GetTriggerTarget()
+    if not model then 
+        ShootUp() 
+        return 
+    end
+    
+    local part = GetHitPart(model)
+    if not part then 
+        ShootUp() 
+        return 
+    end
+    
+    local predictedPos = Predict(part)
+    local redirectedPos = ApplyBulletRedirection(part)
+    MoveMouse(predictedPos:Lerp(redirectedPos, 0.5))
+    ShootDown()
+    lastShot = now
+    lastTriggerUpdate = now
+end)
+
+--// WalkSpeed (Optimized)
+local _G_WS = shared.RageC.WalkSpeed.SlowSpeed
+local walkSpeedConnection
+
+walkSpeedConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode[shared.RageC.WalkSpeed.ToggleKey:upper()] and shared.RageC.WalkSpeed.Enabled then
+        local char = LocalPlayer.Character
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        _G_WS = (_G_WS == shared.RageC.WalkSpeed.SlowSpeed) and shared.RageC.WalkSpeed.FastSpeed or shared.RageC.WalkSpeed.SlowSpeed
+        humanoid.WalkSpeed = _G_WS
+    end
+end)
+
+-- Cleanup function
+local function cleanup()
+    -- Disconnect all connections
+    if camlockConnection then camlockConnection:Disconnect() end
+    if autoAirConnection then autoAirConnection:Disconnect() end
+    if silentAimConnection then silentAimConnection:Disconnect() end
+    if triggerConnection then triggerConnection:Disconnect() end
+    if walkSpeedConnection then walkSpeedConnection:Disconnect() end
+    if fpsConnection then fpsConnection:Disconnect() end
+    
+    -- Clean up FOV circle
+    if FOVCircle and FOVCircle.Remove then 
+        FOVCircle:Remove() 
+    end
+    
+    -- Restore metatable
+    if originalIndex then
+        local success, mt = pcall(getrawmetatable, game)
+        if success then
+            setreadonly(mt, false)
+            mt.__index = originalIndex
+            setreadonly(mt, true)
+        end
+    end
+end
+
+shared.RageC._cleanup = cleanup
+setupSilentAim()
+
+-- Auto cleanup
+game:GetService("Players").PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer then
+        cleanup()
+    end
+end)
+
+warn("RageC Script Loaded Successfully! SilentAim Modes: " .. shared.RageC.SilentAim.Mode)
